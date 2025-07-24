@@ -1,0 +1,261 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>100B Jobs - AI Hiring Dashboard</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+
+    <!-- Bootstrap CSS -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
+
+    <!-- DataTables -->
+    <link rel="stylesheet" href="https://cdn.datatables.net/1.13.4/css/jquery.dataTables.min.css">
+
+    <!-- Choices.js for modern dropdown -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/choices.js/public/assets/styles/choices.min.css" />
+
+    <!-- Custom Styles -->
+    <style>
+        body {
+            background-color: #9ab5d0;
+        }
+        .sidebar {
+            background-color: #9ab5d0;
+            color: #fff;
+            padding: 20px;
+            height: 100vh;
+            border-right: 1px solid #444;
+            overflow-y: auto;
+        }
+        .sidebar h4, .sidebar h5, .sidebar label {
+            color: #fff;
+        }
+        .content {
+            padding: 20px;
+        }
+        #aiReasoning {
+            background: #fff;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            padding: 20px;
+            white-space: pre-wrap;
+            font-size: 15px;
+        }
+        table.dataTable td, table.dataTable th {
+            font-size: 16px;
+            padding: 10px;
+        }
+
+        /* Dark Theme for Choices.js dropdowns */
+        .choices__inner {
+            background-color: #121212 !important;
+            color: #fff !important;
+            border: 1px solid #444 !important;
+            border-radius: 6px;
+        }
+
+        .choices__list--dropdown {
+            background-color: #121212 !important;
+            color: #fff !important;
+            border: 1px solid #444 !important;
+        }
+
+        .choices__list--dropdown .choices__item {
+            background-color: #121212 !important;
+            color: #fff !important;
+        }
+
+        .choices__list--dropdown .choices__item--selectable:hover {
+            background-color: #1f1f1f !important;
+            color: #fff !important;
+        }
+    </style>
+</head>
+<body>
+<div class="container-fluid">
+    <div class="row">
+        <!-- Sidebar -->
+        <div class="col-md-3 sidebar">
+            <h4 class="mb-4">AI Hiring Dashboard</h4>
+
+            <!-- Upload -->
+            <form id="uploadForm" enctype="multipart/form-data" class="mb-4">
+                <label class="form-label">Upload Candidate JSON</label>
+                <input type="file" name="file" accept=".json" class="form-control mb-3">
+                <button class="btn btn-primary w-100">Upload</button>
+            </form>
+
+            <!-- Filters -->
+            <div id="filters" style="display:none;">
+                <h5 class="mb-3">Filters</h5>
+
+                <label class="mt-2">Select Role</label>
+                <select id="roleFilter" class="js-choice" multiple></select>
+
+                <label class="mt-3">Select Location</label>
+                <select id="locationFilter" class="js-choice" multiple></select>
+
+                <label class="mt-3">Select Skills</label>
+                <select id="skillsFilter" class="js-choice" multiple></select>
+
+                <button class="btn btn-success mt-4 w-100" id="applyFilters">Apply Filters</button>
+            </div>
+        </div>
+
+        <!-- Main Content -->
+        <div class="col-md-9 content">
+            <ul class="nav nav-tabs" id="tabMenu">
+                <li class="nav-item">
+                    <a class="nav-link active" data-bs-toggle="tab" href="#candidatesTab">Candidates</a>
+                </li>
+                <li class="nav-item">
+                    <a class="nav-link" data-bs-toggle="tab" href="#topTab">Top Candidates</a>
+                </li>
+                <li class="nav-item">
+                    <a class="nav-link" data-bs-toggle="tab" href="#finalTab">Final Selection</a>
+                </li>
+            </ul>
+
+            <div class="tab-content mt-3">
+                <!-- Candidates Tab -->
+                <div class="tab-pane fade show active" id="candidatesTab">
+                    <h4>Candidate List</h4>
+                    <div id="candidateTable"></div>
+                </div>
+
+                <!-- Top Candidates Tab -->
+                <div class="tab-pane fade" id="topTab">
+                    <h4>Top Candidates by Score</h4>
+                    <div id="topCandidates"></div>
+                </div>
+
+                <!-- Final Selection Tab -->
+                <div class="tab-pane fade" id="finalTab">
+                    <h4>Select Your Final 5 Candidates</h4>
+                    <select id="finalSelect" class="form-select" multiple size="6"></select>
+                    <button class="btn btn-primary mt-3" id="generateFinal">Generate Final Team</button>
+
+                    <div id="finalTeam" class="mt-4"></div>
+                    <h5 class="mt-4">AI Reasoning</h5>
+                    <div id="aiReasoning" class="mt-2" style="display:none;"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- JS Libraries -->
+<script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+<script src="https://cdn.datatables.net/1.13.4/js/jquery.dataTables.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/choices.js/public/assets/scripts/choices.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/showdown/dist/showdown.min.js"></script>
+
+<script>
+    let candidates = [];
+    const converter = new showdown.Converter();
+
+    // Initialize Choices.js
+    function initChoices() {
+        new Choices("#roleFilter", {
+            removeItemButton: true,
+            placeholderValue: "Choose an option",
+            renderSelectedChoices: 'count'
+        });
+        new Choices("#locationFilter", {
+            removeItemButton: true,
+            placeholderValue: "Choose an option",
+            renderSelectedChoices: 'count'
+        });
+        new Choices("#skillsFilter", {
+            removeItemButton: true,
+            placeholderValue: "Choose an option",
+            renderSelectedChoices: 'count'
+        });
+    }
+
+    $("#uploadForm").on("submit", function(e){
+        e.preventDefault();
+        var formData = new FormData(this);
+        $.ajax({
+            url: "/upload",
+            type: "POST",
+            data: formData,
+            processData: false,
+            contentType: false,
+            success: function(res){
+                candidates = res.candidates;
+                $("#filters").show();
+                populateFilters(res.roles, res.locations, res.skills);
+                renderTable("#candidateTable", candidates);
+                $("#finalSelect").empty();
+                candidates.forEach(c => {
+                    $("#finalSelect").append(`<option value="${c.name}">${c.name}</option>`);
+                });
+                initChoices();
+            }
+        });
+    });
+
+    function populateFilters(roles, locations, skills){
+        $("#roleFilter").empty();
+        roles.forEach(r => $("#roleFilter").append(`<option value="${r}">${r}</option>`));
+        $("#locationFilter").empty();
+        locations.forEach(l => $("#locationFilter").append(`<option value="${l}">${l}</option>`));
+        $("#skillsFilter").empty();
+        skills.forEach(s => $("#skillsFilter").append(`<option value="${s}">${s}</option>`));
+    }
+
+    $("#applyFilters").on("click", function(){
+        let data = {
+            roles: $("#roleFilter").val() || [],
+            locations: $("#locationFilter").val() || [],
+            skills: $("#skillsFilter").val() || []
+        };
+        $.ajax({
+            url: "/filter",
+            type: "POST",
+            contentType: "application/json",
+            data: JSON.stringify(data),
+            success: function(res){
+                renderTable("#candidateTable", res.filtered);
+                renderTable("#topCandidates", res.top);
+            }
+        });
+    });
+
+    $("#generateFinal").on("click", function(){
+        let selected = $("#finalSelect").val();
+        if(selected.length !== 5){
+            alert("Please select exactly 5 candidates!");
+            return;
+        }
+        $.ajax({
+            url: "/final-team",
+            type: "POST",
+            contentType: "application/json",
+            data: JSON.stringify({selected:selected}),
+            success: function(res){
+                renderTable("#finalTeam", res.final);
+                let htmlReasoning = converter.makeHtml(res.reasoning);
+                $("#aiReasoning").show().html(htmlReasoning);
+                $("#aiReasoning table").addClass("table table-bordered table-striped");
+            }
+        });
+    });
+
+    function renderTable(container, data){
+        if(data.length === 0){
+            $(container).html("<p>No candidates found</p>");
+            return;
+        }
+        let html = "<table class='table table-bordered table-striped' id='dynamicTable'><thead><tr><th>Name</th><th>Role</th><th>Location</th><th>Experience</th><th>Score</th></tr></thead><tbody>";
+        data.forEach(c => {
+            html += `<tr><td>${c.name}</td><td>${c.role}</td><td>${c.location}</td><td>${c.experience_years}</td><td>${c.score}</td></tr>`;
+        });
+        html += "</tbody></table>";
+        $(container).html(html);
+        $('#dynamicTable').DataTable();
+    }
+</script>
+</body>
+</html>
