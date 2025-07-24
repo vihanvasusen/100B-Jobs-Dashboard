@@ -6,7 +6,7 @@ import requests
 app = Flask(__name__)
 
 # Perplexity API Config
-PERPLEXITY_API_KEY = "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"  # Replace with your key
+PERPLEXITY_API_KEY = "YOUR_API_KEY(ANY_AI_MODEL_API_KEY)"  # Replace with your key
 API_URL = "https://api.perplexity.ai/chat/completions"
 
 # Global variable to store dataframe
